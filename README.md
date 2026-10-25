@@ -1,54 +1,26 @@
-# 🤖 COPILOT : LIS CETTE PAGE EN ENTIER ET APPLIQUE-LA À LA LETTRE
+# Audit Insight — votre tableau de bord d'audit à partir d'un Excel
 
-L'utilisateur t'a joint un fichier Excel/CSV et veut un tableau de bord interactif à partir de ce fichier.
+**👉 https://visitune.github.io/diot/**
 
-## Ce qui existe déjà (NE LE RÉÉCRIS PAS)
-Une application de tableau de bord est déjà en ligne : **https://visitune.github.io/diot/**
-Elle lit n'importe quel Excel/CSV glissé dans la page, devine seule les colonnes (dates, nombres, catégories, statuts Conforme/Non-conforme…) et construit le dashboard (indicateurs, graphiques, tendance, liste des non-conformités, tableau, export).
-Tu NE fabriques PAS de fichier HTML. Tu NE produis PAS de bloc `const CONFIG`. Ton seul travail : préparer un petit réglage `const MAPPING` pour CE fichier, et expliquer à l'utilisateur quoi faire.
+Glissez votre fichier Excel dans la page : le tableau de bord se construit tout seul. Rien n'est envoyé sur Internet, tout reste dans votre navigateur.
 
-## Étape 1 — Lire le fichier joint
-Note : le nom des feuilles ; le numéro de la ligne d'en-tête (0 = première ligne, plus bas s'il y a un titre au-dessus) ; la liste EXACTE des noms de colonnes (copiés avec accents, espaces, majuscules) ; 3 exemples de valeurs pour les colonnes principales.
+## Le fichier attendu
+- **Une ligne par audit.**
+- **Une colonne par point contrôlé** (« Sol propre », « Moulin A_Murs »…), avec la réponse dans la cellule : Conforme / Non conforme / À améliorer / N/A, OK / KO / Partiel, Oui / Non, Satisfaisant…
+- Facultatif : une colonne date, auditeur, nom de l'audit, une colonne `…_notes` ou « Commentaire » à côté d'un point.
 
-## Étape 2 — Choisir le cas
-- **A. Statuts en format long** : UNE colonne contient des résultats (Conforme, Non-conforme, OK, NOK, Oui/Non…) et chaque ligne est un point de contrôle.
-- **B. Statuts en format large** (export SafetyCulture) : PLUSIEURS colonnes contiennent des résultats, une colonne par question, avec des en-têtes `Zone_Question` et des colonnes `_notes`.
-- **C. Sans statuts** : dates, nombres, catégories (ventes, stocks, production…).
+Tout est deviné : ligne d'en-tête, dates, auditeur, sections (le texte avant `_`, ` - ` ou ` > ` dans l'en-tête), réponses. Export SafetyCulture / iAuditor, Excel maison, CSV : ça marche. Si des réponses sont inconnues (par exemple « Acquis / En cours »), l'application vous demande une seule fois ce qu'elles signifient et s'en souvient.
+Des fichiers d'essai sont dans le dossier [`exemples/`](exemples/).
 
-## Étape 3 — Écrire le MAPPING (copie le modèle, ne change que les valeurs)
-```js
-const MAPPING={title:'',accent:'#0f766e',target:85,sheet:null,headerRow:null,dateCol:null,statusCols:null,groupCols:null,valueCols:null,labelCol:null,groupSep:'_',statusWords:{C:[],NC:[],OBS:[],NA:[]}};
-```
-- `title` : titre du dashboard (nom du client + nom de l'audit/fichier). `accent` : couleur `#RRGGBB`. `target` : objectif de conformité en % (85 par défaut).
-- Laisse `null` partout où le fichier est normal : l'application devine seule. C'est le cas le plus fréquent.
-- `headerRow` : seulement si l'en-tête n'est pas sur la première ligne.
-- `statusCols`, `groupCols`, `valueCols`, `dateCol`, `labelCol` : noms de colonnes copiés EXACTEMENT, entre apostrophes, listes entre crochets. Pour forcer « pas de statuts » : `statusCols:[]`.
-- `groupSep:'_'` pour le cas B ; `null` pour A et C.
-- `statusWords` : seulement pour un libellé de résultat inconnu. Déjà connus (inutile de les ajouter) : Conforme, Non conforme, Non-conforme, A améliorer, Partiel, Non audité, N/A, Oui, Non, OK, NC, Satisfaisant, Non satisfaisant. Sinon, ajoute-le en minuscules sans accents dans `C` (bon), `NC` (mauvais), `OBS` (à améliorer) ou `NA` (non applicable).
-- N'invente AUCUNE autre clé. Pas de `zones`, `scoreMax`, `couleurs`, `champs`, etc.
+## Ce que vous obtenez
+Taux de conformité et tendance, conformité par section, points critiques et récurrents, plan d'actions (statut, responsable, photos), **one-pager** exportable en PDF / JPEG, export CSV, sauvegarde de session.
 
-Exemples :
-- SafetyCulture « FOR 05 Audit Propreté et Hygiène » (cas B) : `const MAPPING={title:'Audit Propreté et Hygiène',accent:'#0f766e',target:85,sheet:null,headerRow:null,dateCol:null,statusCols:null,groupCols:null,valueCols:null,labelCol:null,groupSep:'_',statusWords:{C:[],NC:[],OBS:[],NA:[]}};`
-- Colonnes Réf, Date, Contrôleur, Zone, Point de contrôle, Résultat, Remarque (cas A) : `const MAPPING={title:'Contrôles cuisine',accent:'#1d4ed8',target:90,sheet:null,headerRow:null,dateCol:'Date',statusCols:['Résultat'],groupCols:['Zone','Contrôleur'],valueCols:null,labelCol:'Point de contrôle',groupSep:null,statusWords:{C:[],NC:[],OBS:[],NA:[]}};`
-- Colonnes Date, Région, Produit, Quantité, CA (cas C) : `const MAPPING={title:'Ventes',accent:'#7c3aed',target:85,sheet:null,headerRow:null,dateCol:'Date',statusCols:[],groupCols:['Région','Produit'],valueCols:['Quantité','CA'],labelCol:null,groupSep:null,statusWords:{C:[],NC:[],OBS:[],NA:[]}};`
+## À vos couleurs
+- Menu **Identité visuelle** : nom, logo, couleur, objectif de conformité.
+- Menu **Télécharger l'application** : un fichier HTML autonome, déjà à vos couleurs et à votre logo, qui fonctionne hors ligne. À conserver, à partager, ou à donner à Copilot pour le faire évoluer.
 
-## Étape 4 — Ta réponse (format imposé, rien d'autre)
-1. Une ligne : « Cas détecté : A/B/C — [colonnes principales] ».
-2. UN SEUL bloc de code contenant le `const MAPPING={...};` (JavaScript valide, sans commentaire dedans).
-3. Ce texte, mot pour mot :
-   « **Pour obtenir votre tableau de bord :** 1) Ouvrez https://visitune.github.io/diot/ 2) Glissez votre fichier Excel dans la page : le tableau de bord s'affiche. 3) Si un graphique est faux ou manquant : cliquez sur **Réglages** en haut, collez le bloc ci-dessus, cliquez sur **Appliquer**. »
-Moins de 15 lignes au total. Si une information manque (couleur, nom, objectif), garde les valeurs par défaut au lieu de poser des questions.
+## Avec Copilot
+Copilot sert à **modifier** l'application (nouveau graphique, nouvel indicateur…) et à rédiger les rares réglages avancés : voir [`COPILOT.md`](COPILOT.md).
 
-## Interdits
-- Ne dis jamais que tu ne peux pas lire un dépôt ou un lien : tu as tout ici.
-- N'écris pas de code HTML, CSS ou JS d'application. N'invente aucune donnée.
-- Ne produis pas de bloc `const CONFIG`.
-
-## Si l'utilisateur colle un message d'erreur
-Corrige UNIQUEMENT le bloc MAPPING et renvoie-le complet, dans le même format.
-
-## Si l'utilisateur veut un graphique ou indicateur en plus
-Dis-lui de contacter son consultant (ajout dans le code de l'application, non faisable depuis Copilot).
-
----
-*Contenu du dépôt (inutile pour Copilot) : `index.html` et `dashboard.html` (application), `skill/` (briques de code), `archive/` (ancienne méthode abandonnée).*
+## Pour les développeurs
+Un seul fichier, `index.html` (SheetJS et html2canvas embarqués, aucun serveur). Publié par GitHub Pages depuis la branche `main`.
