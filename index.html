@@ -298,10 +298,12 @@ const LS={get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}
 let CONFIG={
  brand:Object.assign({name:'Mon entreprise',logo:'',accent:'#0f766e',site:'',target:85},PRESET.brand||{}),
  statutsExtra:Object.assign({C:[],NC:[],OBS:[],NA:[]},PRESET.statutsExtra||{}),
- long:PRESET.long||null
+ long:PRESET.long||null,
+ cols:PRESET.cols||{}
 };
 try{const o=JSON.parse(localStorage.getItem('gi_config')||'null');if(o)CONFIG=Object.assign(CONFIG,o)}catch(e){}
-const S={audits:[],files:[],view:'dash',tpl:null,sel:new Set(),sec:null,ann:{},ncq:'',ncst:'all',open:null,
+try{const o=JSON.parse(localStorage.getItem('gi_params')||'null');if(o)CONFIG=Object.assign(CONFIG,o)}catch(e){}
+const S={audits:[],files:[],detect:{},lastHeads:[],view:'dash',tpl:null,sel:new Set(),sec:null,ann:{},ncq:'',ncst:'all',open:null,
  brand:Object.assign({},CONFIG.brand,LS.get('gi_brand',{})),
  theme:LS.get('gi_theme',(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light'),
  op:{title:'',subtitle:'',message:null,nb:6,blocks:{trend:true,sections:true,crit:true,pins:true,message:true}}};
@@ -337,10 +339,11 @@ function isDateLike(v,hint){
  if(typeof v==='number')return!!hint&&v>20000&&v<90000;
  if(typeof v==='string'){const s=v.trim();return/^\d{4}-\d\d-\d\d/.test(s)||/^\d{1,2}[\/.]\d{1,2}[\/.]\d{4}/.test(s)}
  return false}
-function splitHeaders(heads){
- for(const sp of ['_',' - ',' – ',' > ',' / ','::']){
+function splitHeaders(heads,forced){
+ if(forced==='none')return heads.map(h=>({sec:'Général',q:h}));
+ for(const sp of (forced?[forced]:['_',' - ',' – ',' > ',' / ','::'])){
   let parts=heads.map(h=>h.split(sp).map(s=>s.trim()).filter(Boolean));
-  if(parts.filter(p=>p.length>=2).length<heads.length*.6)continue;
+  if(forced?!parts.some(p=>p.length>=2):parts.filter(p=>p.length>=2).length<heads.length*.6)continue;
   parts=parts.map(p=>(p.length>1&&PAGE_RE.test(p[0]))?p.slice(1):p);
   return parts.map((p,i)=>p.length>=2?{sec:secName(p[0]),q:p.slice(1).join(' – ')}:{sec:'Général',q:p[0]||heads[i]})}
  return heads.map(h=>({sec:'Général',q:h}))}
@@ -373,13 +376,15 @@ function parseAuto(rows,src,sn){
  /* colonnes de notes liées à une colonne de résultat (« Question » + « Question_notes ») */
  const noteOf=new Map();
  cols.forEach(c=>{const m=c.nh.match(H_RE.note);if(!m||!m[1])return;const b=byNh.get(m[1]);if(b!=null&&b!==c.i){noteOf.set(b,c.i);c.isNote=true}});
+ const OV=CONFIG.cols||{},byOv=n=>n?cols.find(c=>norm(c.name)===norm(n)):null;
  const pick=(re,f)=>cols.find(c=>!c.isNote&&re.test(c.nh)&&(!f||f(c)));
- const idC=pick(H_RE.id,c=>c.dist.size===data.length),nameC=pick(H_RE.name),tplC=pick(H_RE.tpl,c=>c.st<.5),endC=pick(H_RE.end);
+ const idC=pick(H_RE.id,c=>c.dist.size===data.length),nameC=byOv(OV.nom)||pick(H_RE.name),tplC=pick(H_RE.tpl,c=>c.st<.5),endC=pick(H_RE.end);
+ const tplIdC=cols.find(c=>/^template ?id$/.test(c.nh));
  const scoreC=cols.find(c=>c.nh==='score'),totalC=cols.find(c=>/^total ?score$|^score ?max$/.test(c.nh));
  const startC=cols.find(c=>c.nh==='start'),lastC=cols.find(c=>/^last ?update$/.test(c.nh));
  const dsc=c=>/date/.test(c.nh)?3:/^start$|debut/.test(c.nh)?2:1;
- const dateC=cols.filter(c=>!c.isNote&&H_RE.date.test(c.nh)&&c.dt>=.6&&c!==endC).sort((a,b)=>dsc(b)-dsc(a))[0];
- const audC=pick(H_RE.auditor,c=>c.st<.5&&c.num<.5);
+ const dateC=byOv(OV.date)||cols.filter(c=>!c.isNote&&H_RE.date.test(c.nh)&&c.dt>=.6&&c!==endC).sort((a,b)=>dsc(b)-dsc(a))[0];
+ const audC=byOv(OV.auditeur)||pick(H_RE.auditor,c=>c.st<.5&&c.num<.5);
  const meta=new Set([idC,nameC,tplC,endC,scoreC,totalC,startC,lastC].filter(Boolean));
  cols.forEach(c=>{if(SC_META.has(c.nh.replace(/ /g,'')))meta.add(c)});
  /* colonnes de résultats */
@@ -394,7 +399,7 @@ function parseAuto(rows,src,sn){
   const L=autoLong(cols);
   if(L){const r=parseLong(rows.slice(h),src,sn,L);if(r)return r}
   if(!stCols.length)return{audits:[],warn:`Feuille « ${sn} » : aucune colonne de résultats reconnue (Conforme, Non conforme…). Ouvrez « Réglages avancés ».`}}
- const sp=splitHeaders(stCols.map(c=>c.name));
+ const sp=splitHeaders(stCols.map(c=>c.name),OV.sep);
  const Q=stCols.map((c,j)=>({c,sec:sp[j].sec,q:sp[j].q}));
  const used=new Map();Q.forEach(x=>{let k=x.sec+'|'+x.q,n=1;while(used.has(k))k=x.sec+'|'+x.q+' ('+(++n)+')';used.set(k,1);if(n>1)x.q+=' ('+n+')';x.k=k});
  const infoName=c=>{const p=c.name.split('_').map(s=>s.trim()).filter(Boolean);return(p.length>1&&PAGE_RE.test(p[0]))?p.slice(1).join(' – '):c.name};
@@ -412,7 +417,7 @@ function parseAuto(rows,src,sn){
    if(nt)items.push({k:x.k,sec:x.sec,q:x.q,st:'OBS',note:nt,val:null})});
   infoCols.forEach(c=>{const v=r[c.i];if(v==null||String(v).trim()==='')return;const ms=c.dt>=.6?toMs(v):null;
    items.push({k:'Informations|'+infoName(c),sec:'Informations',q:infoName(c),st:'INFO',note:'',val:ms!=null?(ms%864e5===0?fmtD(ms,true):fmtDT(ms)):String(v).trim()})});
-  const tn=tplC&&r[tplC.i]?String(r[tplC.i]):base;
+  const tn=tplC&&r[tplC.i]?String(r[tplC.i]):base,tk=tplIdC&&r[tplIdC.i]?String(r[tplIdC.i]):tn;
   const dm=dateC?toMs(r[dateC.i]):null,sm=startC?toMs(r[startC.i]):null;
   let date=dm||sm||(lastC&&toMs(r[lastC.i])),nodate=false;
   if(!date){date=Date.UTC(2000,0,1)+ri*864e5;nodate=true}
@@ -420,8 +425,10 @@ function parseAuto(rows,src,sn){
   if(ai)aud=ai.val;else if(audC&&r[audC.i]!=null)aud=String(r[audC.i]);
   const idv=idC&&r[idC.i]!=null?String(r[idC.i]):src+'›'+sn+'›'+(h+ri+2);
   const nm=nameU&&r[nameU.i]?String(r[nameU.i]):tn+' · '+(nodate?'n°'+(ri+1):fmtD(date,true));
-  return{id:idv,name:nm,tpl:tn,tplName:tn,author:(audC&&r[audC.i])||'',auditor:aud,date,start:dm||sm||null,end:endC?toMs(r[endC.i]):null,
+  return{id:idv,name:nm,tpl:tk,tplName:tn,author:(audC&&r[audC.i])||'',auditor:aud,date,start:dm||sm||null,end:endC?toMs(r[endC.i]):null,
    fScore:scoreC?Number(r[scoreC.i]):NaN,fTotal:totalC?Number(r[totalC.i]):NaN,src,nodate,items}});
+ S.lastHeads=head.filter(Boolean);
+ S.detect[src+'›'+sn]={tpl:base,n:stCols.length,secs:new Set(sp.map(x=>x.sec).filter(x=>x!=='Général')).size,date:dateC&&dateC.name,aud:audC&&audC.name};
  return{audits,unknown:[...unknown]}}
 function parseLong(rows,src,sn,L){
  L=L||CONFIG.long;if(!L)return null;
@@ -450,7 +457,7 @@ function parseWorkbook(buf,src){
  }else wb=XLSX.read(buf,{type:'array'});
  const audits=[],warn=[],unknown=new Set();
  wb.SheetNames.forEach(sn=>{const rows=XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,raw:true,defval:null,blankrows:false});
-  if(rows.length<2)return;
+  if(rows.length<2||/^(mode d.?emploi|lisez.?moi|aide|readme|listes?|instructions?)$/i.test(sn.trim()))return;
   const r=(CONFIG.long&&parseLong(rows,src,sn))||parseAuto(rows,src,sn);
   audits.push(...r.audits);if(r.warn)warn.push(r.warn);(r.unknown||[]).forEach(u=>unknown.add(u))});
  return{audits,warn,unknown:[...unknown]}}
@@ -470,11 +477,13 @@ async function ingest(name,buf,warns,unk){
 async function handleFiles(files){
  files=[...files].filter(f=>/\.(xlsx|xlsm|xls|csv)$/i.test(f.name));
  if(!files.length){toast('Aucun fichier Excel (.xlsx) détecté');return}
+ if(S.audits.some(a=>a.demo))clearDemo(true);
  let add=0,dup=0;const warns=[],unk=new Set();
  for(const f of files){try{const buf=await f.arrayBuffer();S.files=S.files.filter(x=>x.name!==f.name);S.files.push({name:f.name,buf});
    const r=await ingest(f.name,buf,warns,unk);add+=r.add;dup+=r.dup}
   catch(e){console.error(e);warns.push(`${f.name} : lecture impossible`)}}
  afterLoad(add>0);
+ if(!add&&!dup&&!warns.length){toast('Aucun audit trouvé : une ligne par audit et une colonne par point contrôlé sont attendues (voir « Modèle Excel vierge »).');return}
  toast(`${pl(add,'audit')} ajouté${add>1?'s':''}${dup?` · ${pl(dup,'doublon')} ignoré${dup>1?'s':''}`:''}${warns.length?' · '+warns[0]:''}`);
  if(unk.size)labelModal([...unk])}
 async function reparse(){
@@ -490,7 +499,7 @@ function labelModal(list){
   <select data-lbl="${esc(l)}">${[['','— choisir —'],['C','Conforme'],['NC','Non conforme'],['OBS','À améliorer'],['NA','Non applicable'],['X','Simple information']].map(o=>`<option value="${o[0]}" ${guess(l)===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select></div>`).join('')}
  <div class="frow" style="justify-content:flex-end;margin-top:14px"><button class="btn" data-act="mclose">Plus tard</button><button class="btn pri" data-act="lblsave">Appliquer</button></div>`)}
 function downloadApp(){
- const preset={brand:S.brand,statutsExtra:CONFIG.statutsExtra,long:CONFIG.long,labels:LABELS};
+ const preset={brand:S.brand,statutsExtra:CONFIG.statutsExtra,long:CONFIG.long,cols:CONFIG.cols,labels:LABELS};
  const O='<scr'+'ipt',C='</scr'+'ipt>';
  const tag=O+' id="gi-preset">window.GI_PRESET='+JSON.stringify(preset).replace(/</g,'\\u003c')+';'+C+'\n';
  let html=SRC_HTML.replace(new RegExp(O+' id="gi-preset">[\\s\\S]*?'+C+'\\s*'),'');
@@ -502,12 +511,61 @@ function downloadApp(){
 function emptyState(){
  return`<div class="drop" id="dz"><div class="ico">${icon('upload',30)}</div><h2>Déposez votre fichier Excel d'audit</h2>
  <p>Une ligne par audit, une colonne par point contrôlé (Conforme, Non conforme, À améliorer…).<br>Les sections, les réponses et les dates sont reconnues automatiquement : export SafetyCulture, iAuditor, Excel maison…<br>Tout reste dans votre navigateur : rien n'est envoyé sur Internet.</p>
- <button class="btn pri" data-act="pick">${icon('upload',16)} Choisir des fichiers</button> <button class="btn" data-act="demo">${icon('spark',16)} Voir une démo</button></div>
+ <button class="btn pri" data-act="pick">${icon('upload',16)} Choisir des fichiers</button> <button class="btn" data-act="demo">${icon('spark',16)} Voir une démo</button> <button class="btn" data-act="modele">${icon('download',16)} Modèle Excel vierge</button></div>
  <div class="insights" style="margin-top:18px">
   <div class="ins"><div class="dot bg-ac">${icon('gear',16)}</div><div><b>À vos couleurs</b>« Identité visuelle » (menu de gauche) : logo, couleur, objectif de conformité.</div></div>
   <div class="ins"><div class="dot bg-ac">${icon('download',16)}</div><div><b>Une application à vous</b>« Télécharger l'application » : un seul fichier, aux couleurs de votre entreprise, utilisable hors ligne.</div></div>
   <div class="ins"><div class="dot bg-ac">${icon('save',16)}</div><div><b>Reprenez plus tard</b>« Enregistrer la session » conserve vos audits, actions et photos.</div></div></div>`}
 
+function clearDemo(silent){
+ S.audits=S.audits.filter(a=>!a.demo);Object.keys(S.ann).forEach(k=>{if(k.startsWith('demo_'))delete S.ann[k]});
+ S.sel=new Set(S.audits.map(a=>a.id));S.sec=null;S.open=null;S.tpl=null;afterLoad(false);
+ if(!silent)toast('Démo effacée : déposez votre fichier Excel')}
+function clearAll(){
+ if(!confirm('Effacer tous les audits chargés ? (vos fichiers Excel ne sont pas modifiés)'))return;
+ S.audits=[];S.files=[];S.ann={};S.sel=new Set();S.tpl=null;S.sec=null;S.open=null;S.detect={};render();toast('Tout est effacé')}
+function demoBanner(){
+ if(!S.audits.some(a=>a.demo))return'';
+ return`<div class="ins" style="margin:0 0 16px;border-color:var(--obs);align-items:center"><div class="dot bg-obs">${icon('spark',16)}</div><div style="flex:1"><b>Vous regardez une démo (données fictives)</b>Déposez votre fichier Excel : la démo disparaît automatiquement.</div><button class="btn sm pri" data-act="pick">${icon('upload',14)} Charger mon fichier</button><button class="btn sm" data-act="cleardemo">Effacer la démo</button></div>`}
+function paramModal(){
+ const ex=CONFIG.statutsExtra||{},ov=CONFIG.cols||{},heads=[...new Set(S.lastHeads||[])];
+ const sel=(id,v)=>`<select id="${id}"><option value="">Automatique</option>${heads.map(h=>`<option value="${esc(h)}" ${norm(h)===norm(v||'')?'selected':''}>${esc(trunc(h,60))}</option>`).join('')}</select>`;
+ const lab=[['C','Conforme'],['NC','Non conforme'],['OBS','À améliorer'],['NA','Non applicable']];
+ const det=Object.entries(S.detect||{}).map(([k,d])=>`<div class="chk"><span class="pill ac">${esc(trunc(d.tpl,18))}</span><div><b style="font-weight:600">${esc(k.replace('›',' · '))}</b><em>${d.n} points contrôlés${d.secs?' · '+pl(d.secs,'section'):''} · date : ${esc(d.date||'non trouvée')} · auditeur : ${esc(d.aud||'non trouvé')}</em></div></div>`).join('')||'<div style="color:var(--mute)">Chargez un fichier pour voir ce qui est détecté.</div>';
+ const lbl=Object.keys(LABELS);
+ openModal(`<h2>Paramétrage</h2>
+ <p style="color:var(--mute);margin:0 0 6px">Tout est reconnu automatiquement. Ajustez ici si une réponse ou une colonne est mal comprise : le fichier est relu avec vos réglages.</p>
+ <div class="chk-sec"><h4>Ce qui est détecté</h4>${det}</div>
+ <div class="chk-sec"><h4>Vos réponses</h4><p style="color:var(--mute);margin:0 0 10px;font-size:12.5px">Ajoutez vos mots (séparés par des virgules) dans chaque catégorie. Déjà reconnus sans rien faire : Conforme, OK, Oui, Satisfaisant… / Non conforme, KO, Non, Rouge… / À améliorer, Partiel, Orange… / N/A, Non audité, Sans objet…</p>
+  ${lab.map(([k,t])=>`<div class="fld" style="margin-bottom:10px"><label>${t}</label><input type="text" data-px="${k}" value="${esc((ex[k]||[]).join(', '))}" placeholder="vos mots pour « ${t} »"></div>`).join('')}
+  ${lbl.length?`<label style="display:block;font-size:11.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--mute);font-weight:700;margin:12px 0 6px">Réponses déjà classées</label>${lbl.map(k=>`<div class="frow" style="margin-bottom:6px;flex-wrap:nowrap"><b style="flex:1">${esc(k)}</b><select data-pl="${esc(k)}">${[['C','Conforme'],['NC','Non conforme'],['OBS','À améliorer'],['NA','Non applicable'],['X','Simple information'],['','Oublier ce classement']].map(o=>`<option value="${o[0]}" ${LABELS[k]===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select></div>`).join('')}`:''}</div>
+ <div class="chk-sec"><h4>Vos colonnes</h4>
+  <div class="fld" style="margin-bottom:10px"><label>Colonne date</label>${sel('pcd',ov.date)}</div>
+  <div class="fld" style="margin-bottom:10px"><label>Colonne auditeur</label>${sel('pca',ov.auditeur)}</div>
+  <div class="fld" style="margin-bottom:10px"><label>Colonne nom de l'audit</label>${sel('pcn',ov.nom)}</div>
+  <div class="fld"><label>Sections dans les en-têtes</label><select id="pcs">${[['','Automatique'],['_','Texte avant « _ »'],[' - ','Texte avant « - »'],[' > ','Texte avant « > »'],[' / ','Texte avant « / »'],['none','Pas de sections']].map(o=>`<option value="${o[0]}" ${(ov.sep||'')===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select></div></div>
+ <div class="frow" style="justify-content:space-between;margin-top:16px"><span><button class="btn sm ghost" data-act="modele">${icon('download',14)} Modèle Excel vierge</button>${(S.audits.length&&!S.audits.some(x=>x.demo))?`<button class="btn sm ghost" data-act="modelech">${icon('download',14)} Modèle de ma checklist</button>`:''}<button class="btn sm ghost" data-act="cfg">Avancé…</button></span>
+  <span><button class="btn" data-act="mclose">Annuler</button> <button class="btn pri" data-act="paramsave">Appliquer</button></span></div>`)}
+function saveParams(){
+ const ex={C:[],NC:[],OBS:[],NA:[]};
+ $$('[data-px]').forEach(i=>{ex[i.dataset.px]=i.value.split(/[,;\n]/).map(x=>x.trim()).filter(Boolean)});
+ CONFIG.statutsExtra=ex;CONFIG.cols={date:$('#pcd').value,auditeur:$('#pca').value,nom:$('#pcn').value,sep:$('#pcs').value};
+ $$('[data-pl]').forEach(x=>{if(x.value)LABELS[x.dataset.pl]=x.value;else delete LABELS[x.dataset.pl]});
+ LS.set('gi_labels',LABELS);LS.set('gi_params',{statutsExtra:CONFIG.statutsExtra,cols:CONFIG.cols});
+ closeModal();reparse();toast('Paramétrage appliqué')}
+function modeleXlsx(fromLoaded){
+ const heads=['N° audit','Date','Auditeur','Site'];let q=[];
+ const c=(S.audits.length&&!S.audits.some(a=>a.demo))?ctx():null;
+ if(fromLoaded&&c&&c.all.length){const a=c.all[c.all.length-1];q=a.items.filter(i=>i.st!=='INFO').map(i=>(i.sec&&i.sec!=='Général'?i.sec+'_':'')+i.q)}
+ else[['Accueil',['Propreté du sol','Signalétique visible','Équipements rangés']],['Cuisine',['Plans de travail désinfectés','Températures relevées','Produits correctement étiquetés']],['Stockage',['DLC respectées','Palettes surélevées','Zone propre et dégagée']]].forEach(([s,l])=>l.forEach(x=>q.push(s+'_'+x)));
+ const ws=XLSX.utils.aoa_to_sheet([heads.concat(q)]);
+ ws['!cols']=heads.map(()=>({wch:16})).concat(q.map(h=>({wch:Math.min(34,Math.max(14,Math.round(h.length*.8)))})));
+ const help=[['Comment remplir ce modèle'],[''],['1. Une ligne = un audit. Une colonne = un point contrôlé.'],['2. Dans chaque case de point, tapez une réponse : Conforme, Non conforme, À améliorer ou N/A (OK, KO, Oui, Non, Partiel… fonctionnent aussi).'],['3. Les en-têtes « Section_Point » regroupent automatiquement les points par section (le texte avant le « _ »).'],['4. Pour un commentaire sur un point, ajoutez une colonne « Section_Point_notes » juste après.'],['5. Vous pouvez renommer, ajouter ou supprimer des colonnes de points, et ajouter autant de lignes (audits) que vous voulez.'],['6. Renseignez la date au format JJ/MM/AAAA pour obtenir les courbes de tendance.'],['7. Enregistrez, puis glissez le fichier dans Audit Insight.'],[''],['Exemple de ligne : A-001 | 12/03/2026 | Marie | Paris 11 | Conforme | Non conforme | À améliorer | …']];
+ const wsh=XLSX.utils.aoa_to_sheet(help);wsh['!cols']=[{wch:120}];
+ const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Audits');XLSX.utils.book_append_sheet(wb,wsh,"Mode d'emploi");
+ const buf=XLSX.write(wb,{bookType:'xlsx',type:'array'});
+ dl(new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),fromLoaded&&c?'modele-checklist-vide.xlsx':'modele-audit.xlsx');
+ toast("Modèle téléchargé : remplissez la feuille « Audits », puis déposez-la dans l'application")}
 function afterLoad(first){
  const tpls=[...new Set(S.audits.map(a=>a.tpl))];
  if(!S.tpl||!tpls.includes(S.tpl))S.tpl=tpls[0]||null;
@@ -641,7 +699,7 @@ function actionStats(c){
  <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn sm" data-act="nav" data-v="nc">Gérer les actions</button><button class="btn sm pri" data-act="nav" data-v="op">${icon('page',14)} One-pager</button></div>`}
 views.audits=function(){
  const c=ctx();if(!c.all.length)return emptyState();const P=curPal();
- return`<div class="acards">${[...c.all].reverse().map(a=>`<div class="card acard" data-act="auditopen" data-v="${esc(a.id)}"><div>${gaugeSvg(a.rate,78,P,9)}</div>
+ return`<div class="frow" style="justify-content:flex-end;margin-bottom:12px"><button class="btn sm" data-act="clearall">${icon('trash',14)} Tout effacer</button></div><div class="acards">${[...c.all].reverse().map(a=>`<div class="card acard" data-act="auditopen" data-v="${esc(a.id)}"><div>${gaugeSvg(a.rate,78,P,9)}</div>
   <div style="min-width:0"><h4>${esc(a.name)}</h4><div class="m">${dtx(a)}${a.dur?' · '+Math.floor(a.dur/60)+'h'+pad(a.dur%60):''}</div>
   <div class="m">${esc(a.src)}</div><div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap"><span class="pill ok">${a.c.C} conformes</span><span class="pill nc">${a.c.NC} NC</span>${a.c.OBS?`<span class="pill obs">${a.c.OBS} obs.</span>`:''}</div></div>
   <button class="x" data-act="auditdel" data-v="${esc(a.id)}" data-tip="Retirer cet audit">${icon('trash',16)}</button></div>`).join('')}</div>`}
@@ -816,7 +874,7 @@ function demo(){
    if(sec==='Infrastructure'){if(rnd()<.5)items.push({k:sec+'|'+text,sec,q:text,st:'OBS',note:notes[Math.floor(rnd()*notes.length)]});return}
    const bad=rec.has(i)?(rnd()<.8):(rnd()<pn[n]*.45);const na=rnd()<.03;
    items.push({k:sec+'|'+text,sec,q:text,st:na?'NA':bad?'NC':'C',note:bad?notes[Math.floor(rnd()*notes.length)]:''})});
-  const a={id,name:`${fmtD(d,true)} / Démo`,tpl:'demo',tplName:'Audit Hygiène - Locaux de lavage (démo)',author:'Démo',auditor:who[n],date:d,start:d,end:d+7800000,src:'données fictives',items};analyse(a);a._seen=1;S.audits.push(a);S.sel.add(id)});
+  const a={id,name:`${fmtD(d,true)} / Démo`,tpl:'demo',tplName:'Audit Hygiène - Locaux de lavage (démo)',author:'Démo',auditor:who[n],date:d,start:d,end:d+7800000,src:'données fictives',demo:true,items};analyse(a);a._seen=1;S.audits.push(a);S.sel.add(id)});
  S.tpl='demo';S.view='dash';render();toast('Démo chargée : 4 audits fictifs')}
 
 /* ===== Rendu & événements ===== */
@@ -829,8 +887,8 @@ function render(){
  const b=S.brand;
  $('#app').innerHTML=`<div class="shell"><aside class="side"><div class="brandbox${b.logo&&b.logo.startsWith('data:image/svg')?' w':''}"><div class="logo">${b.logo?`<img src="${b.logo}">`:esc((b.name||'?')[0].toUpperCase())}</div><div><b>${esc(b.name)}</b><small>Audit Insight</small></div></div>
  <nav class="nav">${[['dash','dash','Tableau de bord'],['audits','file','Audits'],['nc','alert','Non-conformités'],['op','page','One-pager']].map(n=>`<button class="${S.view===n[0]?'on':''}" data-act="nav" data-v="${n[0]}">${icon(n[1])}${n[2]}${n[0]==='nc'&&nNC?`<span class="badge">${nNC}</span>`:''}</button>`).join('')}</nav>
- <div class="sidefoot"><button data-act="pick">${icon('upload')}Ajouter des fichiers</button><button data-act="savesess">${icon('save')}Enregistrer la session</button><button data-act="loadsess">${icon('file')}Ouvrir une session</button><button data-act="brand">${icon('gear')}Identité visuelle</button><button data-act="dlapp">${icon('download')}Télécharger l'application</button><button data-act="cfg">${icon('gear')}Réglages avancés</button><button data-act="theme">${icon(S.theme==='dark'?'sun':'moon')}Thème ${S.theme==='dark'?'clair':'sombre'}</button></div></aside>
- <main class="main"><div class="top"><h1>${TITLES[S.view]}</h1><span class="sp"></span>${S.audits.length&&S.view!=='op'?`<button class="btn pri" data-act="pick">${icon('plus',15)} Ajouter des audits</button>`:''}${S.view==='op'?'':''}</div><div class="content" id="content">${views[S.view]()}</div></main></div>`;
+ <div class="sidefoot"><button data-act="pick">${icon('upload')}Ajouter des fichiers</button><button data-act="savesess">${icon('save')}Enregistrer la session</button><button data-act="loadsess">${icon('file')}Ouvrir une session</button><button data-act="brand">${icon('gear')}Identité visuelle</button><button data-act="modele">${icon('file')}Modèle Excel vierge</button><button data-act="param">${icon('gear')}Paramétrage</button><button data-act="dlapp">${icon('download')}Télécharger l'application</button><button data-act="theme">${icon(S.theme==='dark'?'sun':'moon')}Thème ${S.theme==='dark'?'clair':'sombre'}</button></div></aside>
+ <main class="main"><div class="top"><h1>${TITLES[S.view]}</h1><span class="sp"></span>${S.audits.length&&S.view!=='op'?`<button class="btn pri" data-act="pick">${icon('plus',15)} Ajouter des audits</button>`:''}${S.view==='op'?'':''}</div><div class="content" id="content">${demoBanner()}${views[S.view]()}</div></main></div>`;
  fitSheet();scrollTo(0,y)}
 function rerenderKeep(){render()}
 function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('on');clearTimeout(toast.t);toast.t=setTimeout(()=>t.classList.remove('on'),3600)}
@@ -864,6 +922,11 @@ document.addEventListener('click',e=>{
   case'cfgreset':try{localStorage.removeItem('gi_config')}catch(e){}location.reload();break;
   case'mclose':closeModal();break;
   case'dlapp':downloadApp();break;
+  case'modele':modeleXlsx(false);break;
+  case'param':paramModal();break;
+  case'cleardemo':clearDemo();break;
+  case'clearall':clearAll();break;
+  case'paramsave':saveParams();break;
   case'lblsave':$$('[data-lbl]').forEach(x=>{if(x.value)LABELS[norm(x.dataset.lbl)]=x.value});LS.set('gi_labels',LABELS);closeModal();reparse();break;
   case'savesess':saveSession();break;
   case'loadsess':{const i=document.createElement('input');i.type='file';i.accept='.json';i.onchange=()=>i.files[0]&&loadSession(i.files[0]);i.click();break}

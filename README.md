@@ -12,6 +12,16 @@ Glissez votre fichier Excel dans la page : le tableau de bord se construit tout 
 Tout est deviné : ligne d'en-tête, dates, auditeur, sections (le texte avant `_`, ` - ` ou ` > ` dans l'en-tête), réponses. Export SafetyCulture / iAuditor, Excel maison, CSV : ça marche. Si des réponses sont inconnues (par exemple « Acquis / En cours »), l'application vous demande une seule fois ce qu'elles signifient et s'en souvient.
 Des fichiers d'essai sont dans le dossier [`exemples/`](exemples/).
 
+## SafetyCulture : toutes les checklists
+Chaque export SafetyCulture (Excel ou CSV, séparateur `;` ou `,`) est lu tel quel. Si un export mélange **plusieurs types de checklists** (colonnes différentes), l'application les sépare grâce au modèle (`templateID` / `templateName`) : un sélecteur « Modèle » apparaît en haut du tableau de bord, avec ses propres sections et indicateurs. Vous pouvez aussi charger plusieurs fichiers à la suite.
+
+## Votre propre Excel (sans outil d'inspection)
+- **Modèle Excel vierge** (menu de gauche) : un fichier prêt à remplir (une ligne par audit, une colonne par point, mode d'emploi inclus). Renommez, ajoutez ou supprimez des points à volonté. Depuis **Paramétrage**, « Modèle de ma checklist » reconstruit un modèle vide à partir d'une checklist déjà chargée.
+- **Paramétrage** : dites quels mots signifient Conforme / Non conforme / À améliorer / N/A (OK, KO, Validé…), choisissez la colonne date, auditeur ou nom d'audit, ou le séparateur de sections. Le fichier est relu aussitôt ; le réglage est mémorisé et inclus dans l'application téléchargée.
+
+## La démo
+« Voir une démo » charge des données fictives. Pour passer à vos données : déposez votre fichier (la démo disparaît automatiquement) ou cliquez **Effacer la démo** dans le bandeau orange. **Tout effacer** (page Audits) vide l'application à tout moment.
+
 ## Ce que vous obtenez
 Taux de conformité et tendance, conformité par section, points critiques et récurrents, plan d'actions (statut, responsable, photos), **one-pager** exportable en PDF / JPEG, export CSV, sauvegarde de session.
 

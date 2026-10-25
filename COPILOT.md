@@ -20,6 +20,9 @@ Lecture de n'importe quel Excel/CSV « une ligne par audit, une colonne par poin
 | Mots reconnus comme Conforme / NC / À améliorer / N/A | `BUILTIN`, `statusOf` |
 | Lecture d'un fichier « une ligne par audit » | `parseAuto`, `splitHeaders` |
 | Fichier « une ligne par réponse » | `autoLong`, `parseLong` |
+| Paramétrage (réponses, colonnes) | `paramModal`, `saveParams`, `LABELS`, `CONFIG.cols` |
+| Modèle Excel vierge | `modeleXlsx` |
+| Démo / effacement | `demo`, `clearDemo`, `clearAll`, `demoBanner` |
 | Calculs (taux, sections, récurrence) | `analyse`, `ctx` |
 | Tableau de bord | `views.dash` |
 | Liste des non-conformités / plan d'actions | `views.nc`, `nclist`, `detail` |
