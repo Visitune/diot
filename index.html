@@ -288,7 +288,7 @@ const IC={
  check:'<path d="m5 12 5 5L20 7"/>',x:'<path d="M6 6l12 12M18 6 6 18"/>',plus:'<path d="M12 5v14M5 12h14"/>',
  trend:'<path d="m3 17 6-6 4 4 8-8M15 7h6v6"/>',print:'<path d="M6 9V3h12v6M6 18H4v-7h16v7h-2M7 14h10v7H7z"/>',
  save:'<path d="M5 3h11l4 4v14H5z"/><path d="M8 3v5h7V3M8 21v-7h8v7"/>',img:'<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="m21 16-5-5-9 9"/>',
- trash:'<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',spark:'<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M18 6l-2.5 2.5M8.5 15.5 6 18"/>'};
+ trash:'<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',help:'<circle cx="12" cy="12" r="9"/><path d="M9.6 9.2a2.5 2.5 0 1 1 3.6 2.2c-.8.5-1.2 1-1.2 1.9M12 17h.01"/>',spark:'<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M18 6l-2.5 2.5M8.5 15.5 6 18"/>'};
 const icon=(n,s=18)=>`<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${IC[n]||''}</svg>`;
 
 /* ===== État ===== */
@@ -425,7 +425,7 @@ function parseAuto(rows,src,sn){
   if(ai)aud=ai.val;else if(audC&&r[audC.i]!=null)aud=String(r[audC.i]);
   const idv=idC&&r[idC.i]!=null?String(r[idC.i]):src+'›'+sn+'›'+(h+ri+2);
   const nm=nameU&&r[nameU.i]?String(r[nameU.i]):tn+' · '+(nodate?'n°'+(ri+1):fmtD(date,true));
-  return{id:idv,name:nm,tpl:tk,tplName:tn,author:(audC&&r[audC.i])||'',auditor:aud,date,start:dm||sm||null,end:endC?toMs(r[endC.i]):null,
+  return{id:idv,name:nm,tpl:tk,tplName:tn,tplExplicit:!!((tplC&&r[tplC.i])||(tplIdC&&r[tplIdC.i])),author:(audC&&r[audC.i])||'',auditor:aud,date,start:dm||sm||null,end:endC?toMs(r[endC.i]):null,
    fScore:scoreC?Number(r[scoreC.i]):NaN,fTotal:totalC?Number(r[totalC.i]):NaN,src,nodate,items}});
  S.lastHeads=head.filter(Boolean);
  S.detect[src+'›'+sn]={tpl:base,n:stCols.length,secs:new Set(sp.map(x=>x.sec).filter(x=>x!=='Général')).size,date:dateC&&dateC.name,aud:audC&&audC.name};
@@ -469,28 +469,138 @@ function analyse(a){
  a.dur=(a.start&&a.end&&a.end>a.start)?Math.round((a.end-a.start)/60000):null;
  a.label=(a.nodate?trunc(a.name,18):fmtD(a.date))+(a.auditor?' · '+trunc(a.auditor,22):'');
  return a}
-async function ingest(name,buf,warns,unk){
+/* ===== Types d'audit : on ne compare que des colonnes identiques ===== */
+function tplRegistry(){
+ const m=new Map();
+ S.audits.forEach(a=>{let t=m.get(a.tpl);if(!t){t={key:a.tpl,name:a.tplName,q:new Set(),explicit:!!a.tplExplicit};m.set(a.tpl,t)}
+  a.items.forEach(i=>{if(i.st!=='INFO')t.q.add(i.k)})});
+ return m}
+const jac=(A,B)=>{let n=0;A.forEach(x=>{if(B.has(x))n++});const u=A.size+B.size-n;return u?n/u:1};
+function resolveBatches(list,notes){
+ const reg=tplRegistry(),groups=new Map();
+ list.forEach(a=>{const g=a.tpl+'¦'+a.tplName;if(!groups.has(g))groups.set(g,[]);groups.get(g).push(a)});
+ const names=()=>new Set([...reg.values()].map(t=>t.name));
+ const uniqueKey=k=>{let n=1,kk=k;while(reg.has(kk))kk=k+'#'+(++n);return kk};
+ const uniqueName=(nm,src)=>{let n=1,x=nm;const s=names();if(s.has(x)&&src){x=nm+' · '+String(src).replace(/\.[^.]+$/,'');}while(s.has(x))x=nm+' ('+(++n)+')';return x};
+ groups.forEach(arr=>{
+  const key=arr[0].tpl,name=arr[0].tplName,explicit=!!arr[0].tplExplicit,q=new Set();
+  arr.forEach(a=>a.items.forEach(i=>{if(i.st!=='INFO')q.add(i.k)}));
+  let target=null,best=-1;
+  reg.forEach(t=>{if(explicit&&t.key!==key)return;const j=jac(q,t.q);if(j>best){best=j;target=t}});
+  const assign=(k,n)=>arr.forEach(a=>{a.tpl=k;a.tplName=n});
+  if(target&&best>=.8){
+   assign(target.key,target.name);
+   if(best<1)notes.push({type:'close',name:target.name,diff:[...q].filter(x=>!target.q.has(x)).length+[...target.q].filter(x=>!q.has(x)).length});
+   q.forEach(x=>target.q.add(x));
+  }else if(target&&(explicit||best>=.3)){
+   const nk=uniqueKey(key),nn=uniqueName(target.name+' – autres colonnes',arr[0].src);
+   assign(nk,nn);reg.set(nk,{key:nk,name:nn,q:new Set(q),explicit});
+   notes.push({type:'variant',ids:arr.map(a=>a.id),newKey:nk,newName:nn,existingKey:target.key,existingName:target.name,
+    common:[...q].filter(x=>target.q.has(x)).length,nNew:q.size,nOld:target.q.size,
+    onlyNew:[...q].filter(x=>!target.q.has(x)).slice(0,6),onlyOld:[...target.q].filter(x=>!q.has(x)).slice(0,6)});
+  }else{
+   const nk=uniqueKey(key),nn=uniqueName(name,arr[0].src);
+   assign(nk,nn);reg.set(nk,{key:nk,name:nn,q:new Set(q),explicit});
+   if(reg.size>1)notes.push({type:'new',name:nn})}
+ })}
+function noteToast(notes){
+ const m=[];
+ notes.filter(n=>n.type==='new').forEach(n=>m.push(`« ${trunc(n.name,28)} » : nouveau type d'audit (colonnes différentes, non comparé aux autres)`));
+ notes.filter(n=>n.type==='close').forEach(n=>m.push(`colonnes proches de « ${trunc(n.name,24)} » (${pl(n.diff,'différence')}) : compilés ensemble`));
+ return m.join(' · ')}
+function variantModal(notes){
+ const v=notes.filter(n=>n.type==='variant');if(!v.length)return;
+ S.pend=v;
+ openModal(`<h2>Les colonnes ne sont pas les mêmes</h2>
+ <p style="color:var(--mute);margin:0 0 14px">On ne compare que ce qui est comparable : des audits n'ont les mêmes points contrôlés que s'ils ont les mêmes colonnes. Ces fichiers ressemblent à un type d'audit déjà chargé, sans être identiques. Ils sont gardés <b>à part</b> par sécurité.</p>
+ ${v.map((n,i)=>`<div class="chk-sec" data-vi="${i}"><h4>${esc(trunc(n.newName,50))}</h4>
+  <div style="font-size:13px;margin-bottom:6px">${n.common} colonnes en commun sur ${n.nNew} (modèle « ${esc(trunc(n.existingName,30))} » : ${n.nOld}).</div>
+  ${n.onlyNew.length?`<div style="font-size:12.5px;color:var(--mute)"><b>Nouvelles colonnes :</b> ${n.onlyNew.map(x=>esc(trunc(x.split('|')[1]||x,40))).join(' · ')}${n.nNew-n.common>6?'…':''}</div>`:''}
+  ${n.onlyOld.length?`<div style="font-size:12.5px;color:var(--mute);margin-top:3px"><b>Colonnes absentes :</b> ${n.onlyOld.map(x=>esc(trunc(x.split('|')[1]||x,40))).join(' · ')}${n.nOld-n.common>6?'…':''}</div>`:''}
+  <div class="frow" style="margin-top:10px"><button class="btn sm pri" data-act="mergevar" data-v="${i}">Comparer quand même</button><span style="color:var(--mute);font-size:12px">(seules les colonnes communes seront comparables ; vous pouvez aussi renommer les colonnes dans Excel)</span></div></div>`).join('')}
+ <div class="frow" style="justify-content:flex-end;margin-top:14px"><button class="btn" data-act="mclose">Garder séparés</button></div>`)}
+function mergeVariant(i){
+ const n=(S.pend||[])[i];if(!n)return;
+ S.audits.forEach(a=>{if(n.ids.includes(a.id)){a.tpl=n.existingKey;a.tplName=n.existingName}});
+ S.pend[i]=null;S.tpl=n.existingKey;S.sel=new Set(S.audits.filter(a=>a.tpl===S.tpl).map(a=>a.id));
+ const left=S.pend.filter(Boolean);closeModal();render();
+ if(left.length)variantModal(left.map(x=>x));else toast('Audits compilés avec « '+trunc(n.existingName,30)+' »')}
+
+/* ===== Sessions : fichier, noms dans le navigateur, sauvegarde automatique ===== */
+const KV=(()=>{
+ const LSK={get:async k=>{try{return JSON.parse(localStorage.getItem('gi_kv:'+k)||'null')}catch(e){return null}},
+  set:async(k,v)=>{try{localStorage.setItem('gi_kv:'+k,JSON.stringify(v))}catch(e){toast('Sauvegarde impossible : espace insuffisant dans ce navigateur')}},
+  del:async k=>{try{localStorage.removeItem('gi_kv:'+k)}catch(e){}}};
+ let dbp=null,useLS=!(typeof indexedDB!=='undefined'&&indexedDB);
+ const TO=(p,ms)=>Promise.race([p,new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),ms))]);
+ const db=()=>dbp||(dbp=new Promise((res,rej)=>{const r=indexedDB.open('audit-insight',1);r.onupgradeneeded=()=>r.result.createObjectStore('kv');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);r.onblocked=()=>rej(new Error('blocked'))}));
+ const tx=(mode,fn)=>db().then(d=>new Promise((res,rej)=>{const t=d.transaction('kv',mode),q=fn(t.objectStore('kv'));t.oncomplete=()=>res(q&&q.result);t.onerror=()=>rej(t.error)}));
+ const run=async(op,fn,args)=>{if(!useLS){try{return await TO(fn(),1500)}catch(e){useLS=true}}return LSK[op](...args)};
+ return{get:k=>run('get',()=>tx('readonly',s=>s.get(k)),[k]),set:(k,v)=>run('set',()=>tx('readwrite',s=>s.put(v,k)),[k,v]),del:k=>run('del',()=>tx('readwrite',s=>s.delete(k)),[k])}})();
+function sessData(name){
+ return{v:2,name:name||'',date:Date.now(),audits:S.audits.filter(a=>!a.demo).map(({map,...r})=>r),ann:S.ann,sel:[...S.sel],tpl:S.tpl,op:S.op}}
+function applySess(d){
+ S.audits=(d.audits||[]).map(a=>{analyse(a);a._seen=1;return a});S.ann=d.ann||{};
+ S.sel=new Set(d.sel||S.audits.map(a=>a.id));S.tpl=d.tpl||(S.audits[0]&&S.audits[0].tpl)||null;
+ if(d.op)S.op=Object.assign(S.op,d.op);S.resume=null;S.sec=null;S.open=null;S.view='dash';render()}
+let _as=null;
+function queueAutosave(){
+ if(!LS.get('gi_autosave',true))return;clearTimeout(_as);
+ _as=setTimeout(async()=>{if(!S.audits.some(a=>!a.demo))return;await KV.set('auto',sessData('auto'));S.lastSave=Date.now()},1500)}
+async function sessModal(){
+ const idx=(await KV.get('sessions'))||[],auto=await KV.get('auto'),on=LS.get('gi_autosave',true);
+ const nm=esc((S.brand.name||'audits')+' '+new Date().toISOString().slice(0,10));
+ openModal(`<h2>Sessions</h2>
+ <p style="color:var(--mute);margin:0 0 6px">Une session garde vos audits chargés, vos actions, responsables, photos, épingles et la mise en page du one-pager. Rien ne quitte votre ordinateur.</p>
+ <div class="chk-sec"><h4>Dans ce navigateur</h4>
+  <div class="frow" style="margin-bottom:10px"><input type="text" id="sn" value="${nm}" style="flex:1;min-width:200px"><button class="btn pri" data-act="sessave">Enregistrer sous ce nom</button></div>
+  ${idx.length?idx.map(s=>`<div class="chk"><div style="flex:1"><b style="font-weight:600">${esc(s.name)}</b><em>${pl(s.n,'audit')} · ${esc(fmtDT(s.date))}</em></div><button class="btn sm" data-act="sessopen" data-v="${esc(s.name)}">Ouvrir</button><button class="btn sm ghost" data-act="sessdel" data-v="${esc(s.name)}">${icon('trash',14)}</button></div>`).join(''):'<div style="color:var(--mute);font-size:13px">Aucune session enregistrée sous un nom.</div>'}</div>
+ <div class="chk-sec"><h4>Dans un fichier</h4><div class="frow"><button class="btn" data-act="savesess">${icon('download',14)} Télécharger un fichier de session</button><button class="btn" data-act="loadsess">${icon('upload',14)} Ouvrir un fichier de session</button></div>
+  <div style="color:var(--mute);font-size:12.5px;margin-top:6px">Le fichier .json se range et se partage comme un document (clé USB, e-mail, dossier partagé).</div></div>
+ <div class="chk-sec"><h4>Sauvegarde automatique</h4>
+  <label style="display:flex;gap:8px;align-items:center;text-transform:none;letter-spacing:0;font-size:13.5px;color:var(--ink)"><input type="checkbox" id="asv" ${on?'checked':''} data-in="autosave"> Garder automatiquement ma dernière session dans ce navigateur</label>
+  <div style="color:var(--mute);font-size:12.5px;margin:6px 0 8px">${auto?'Dernière sauvegarde : '+esc(fmtDT(auto.date))+' · '+pl((auto.audits||[]).length,'audit'):'Aucune sauvegarde automatique pour l\'instant.'} Sur un ordinateur partagé, décochez et supprimez.</div>
+  <div class="frow">${auto?`<button class="btn sm" data-act="resume">Reprendre cette sauvegarde</button><button class="btn sm ghost" data-act="dropauto">Supprimer la sauvegarde</button>`:''}</div></div>
+ <div class="frow" style="justify-content:flex-end;margin-top:12px"><button class="btn" data-act="mclose">Fermer</button></div>`)}
+async function sessSave(){
+ const n=($('#sn')&&$('#sn').value||'').trim();if(!n){toast('Donnez un nom à la session');return}
+ if(!S.audits.some(a=>!a.demo)){toast('Chargez d\'abord vos audits');return}
+ const idx=((await KV.get('sessions'))||[]).filter(s=>s.name!==n);
+ const d=sessData(n);await KV.set('sess:'+n,d);idx.unshift({name:n,date:d.date,n:d.audits.length});await KV.set('sessions',idx);
+ toast('Session « '+trunc(n,30)+' » enregistrée');sessModal()}
+async function sessOpen(n){const d=await KV.get('sess:'+n);if(!d){toast('Session introuvable');return}closeModal();applySess(d);toast('Session « '+trunc(n,30)+' » ouverte')}
+async function sessDel(n){if(!confirm('Supprimer la session « '+n+' » ?'))return;await KV.del('sess:'+n);await KV.set('sessions',((await KV.get('sessions'))||[]).filter(s=>s.name!==n));sessModal()}
+async function resumeAuto(){const d=await KV.get('auto');if(!d){toast('Aucune sauvegarde trouvée');return}closeModal();applySess(d);toast('Dernière session reprise')}
+async function dropAuto(){await KV.del('auto');S.resume=null;toast('Sauvegarde automatique supprimée');if($('#modal'))sessModal();else render()}
+async function checkResume(){
+ const d=await KV.get('auto');
+ if(d&&d.audits&&d.audits.length&&!S.audits.length){S.resume={n:d.audits.length,date:d.date};render()}}
+
+async function ingest(name,buf,warns,unk,notes){
  const r=parseWorkbook(buf,name);warns.push(...r.warn);(r.unknown||[]).forEach(u=>unk.add(u));
- let add=0,dup=0;
- r.audits.forEach(a=>{if(S.audits.some(x=>x.id===a.id)){dup++;return}analyse(a);S.audits.push(a);add++});
- return{add,dup}}
+ const fresh=[];let dup=0;
+ r.audits.forEach(a=>{if(S.audits.some(x=>x.id===a.id)||fresh.some(x=>x.id===a.id)){dup++;return}fresh.push(a)});
+ resolveBatches(fresh,notes);
+ fresh.forEach(a=>{analyse(a);S.audits.push(a)});
+ return{add:fresh.length,dup}}
 async function handleFiles(files){
  files=[...files].filter(f=>/\.(xlsx|xlsm|xls|csv)$/i.test(f.name));
  if(!files.length){toast('Aucun fichier Excel (.xlsx) détecté');return}
  if(S.audits.some(a=>a.demo))clearDemo(true);
- let add=0,dup=0;const warns=[],unk=new Set();
+ let add=0,dup=0;const warns=[],unk=new Set(),notes=[];
  for(const f of files){try{const buf=await f.arrayBuffer();S.files=S.files.filter(x=>x.name!==f.name);S.files.push({name:f.name,buf});
-   const r=await ingest(f.name,buf,warns,unk);add+=r.add;dup+=r.dup}
+   const r=await ingest(f.name,buf,warns,unk,notes);add+=r.add;dup+=r.dup}
   catch(e){console.error(e);warns.push(`${f.name} : lecture impossible`)}}
  afterLoad(add>0);
  if(!add&&!dup&&!warns.length){toast('Aucun audit trouvé : une ligne par audit et une colonne par point contrôlé sont attendues (voir « Modèle Excel vierge »).');return}
- toast(`${pl(add,'audit')} ajouté${add>1?'s':''}${dup?` · ${pl(dup,'doublon')} ignoré${dup>1?'s':''}`:''}${warns.length?' · '+warns[0]:''}`);
- if(unk.size)labelModal([...unk])}
+ const nt=noteToast(notes);
+ toast(`${pl(add,'audit')} ajouté${add>1?'s':''}${dup?` · ${pl(dup,'doublon')} ignoré${dup>1?'s':''}`:''}${warns.length?' · '+warns[0]:''}${nt?' · '+nt:''}`);
+ if(unk.size)labelModal([...unk]);else variantModal(notes)}
 async function reparse(){
- const warns=[],unk=new Set(),names=new Set(S.files.map(f=>f.name));
+ const warns=[],unk=new Set(),notes=[],names=new Set(S.files.map(f=>f.name));
  S.audits=S.audits.filter(a=>!names.has(a.src));
- for(const f of S.files)await ingest(f.name,f.buf,warns,unk);
- afterLoad(true);if(unk.size)labelModal([...unk])}
+ for(const f of S.files)await ingest(f.name,f.buf,warns,unk,notes);
+ afterLoad(true);if(unk.size)labelModal([...unk]);else variantModal(notes)}
 function labelModal(list){
  const guess=l=>{const n=norm(l);return/^(ok|bon|vert|fait|oui|conf)/.test(n)?'C':/^(ko|non|rouge|mauvais|nok|ecart)/.test(n)?'NC':/(partiel|moyen|orange|ameli|revoir)/.test(n)?'OBS':/(n\/a|applicable|sans objet)/.test(n)?'NA':''};
  openModal(`<h2>Quelles sont ces réponses ?</h2>
@@ -509,13 +619,14 @@ function downloadApp(){
  dl(new Blob([html],{type:'text/html'}),`audit-insight-${slug}.html`);
  toast('Application téléchargée : un seul fichier, à ouvrir dans le navigateur ou à donner à Copilot pour la modifier')}
 function emptyState(){
- return`<div class="drop" id="dz"><div class="ico">${icon('upload',30)}</div><h2>Déposez votre fichier Excel d'audit</h2>
+ const rs=S.resume?`<div class="ins" style="margin-bottom:16px;border-color:var(--accent);align-items:center"><div class="dot bg-ac">${icon('save',16)}</div><div style="flex:1"><b>Session précédente trouvée</b>${pl(S.resume.n,'audit')} · ${esc(fmtDT(S.resume.date))}</div><button class="btn sm pri" data-act="resume">Reprendre</button><button class="btn sm" data-act="dropauto">Supprimer</button></div>`:'';
+ return rs+`<div class="drop" id="dz"><div class="ico">${icon('upload',30)}</div><h2>Déposez votre fichier Excel d'audit</h2>
  <p>Une ligne par audit, une colonne par point contrôlé (Conforme, Non conforme, À améliorer…).<br>Les sections, les réponses et les dates sont reconnues automatiquement : export SafetyCulture, iAuditor, Excel maison…<br>Tout reste dans votre navigateur : rien n'est envoyé sur Internet.</p>
- <button class="btn pri" data-act="pick">${icon('upload',16)} Choisir des fichiers</button> <button class="btn" data-act="demo">${icon('spark',16)} Voir une démo</button> <button class="btn" data-act="modele">${icon('download',16)} Modèle Excel vierge</button></div>
+ <button class="btn pri" data-act="pick">${icon('upload',16)} Choisir des fichiers</button> <button class="btn" data-act="modele">${icon('download',16)} Modèle Excel vierge</button> <button class="btn" data-act="demo">${icon('spark',16)} Voir une démo</button> <button class="btn" data-act="nav" data-v="guide">${icon('help',16)} Lire le guide</button></div>
  <div class="insights" style="margin-top:18px">
-  <div class="ins"><div class="dot bg-ac">${icon('gear',16)}</div><div><b>À vos couleurs</b>« Identité visuelle » (menu de gauche) : logo, couleur, objectif de conformité.</div></div>
-  <div class="ins"><div class="dot bg-ac">${icon('download',16)}</div><div><b>Une application à vous</b>« Télécharger l'application » : un seul fichier, aux couleurs de votre entreprise, utilisable hors ligne.</div></div>
-  <div class="ins"><div class="dot bg-ac">${icon('save',16)}</div><div><b>Reprenez plus tard</b>« Enregistrer la session » conserve vos audits, actions et photos.</div></div></div>`}
+  <div class="ins"><div class="dot bg-ac">${icon('file',16)}</div><div><b>Mêmes colonnes = comparables</b>Les audits d'un même modèle se compilent ; un autre modèle (autres colonnes) est gardé à part.</div></div>
+  <div class="ins"><div class="dot bg-ac">${icon('gear',16)}</div><div><b>À vos couleurs</b>« Identité visuelle » : logo, couleur, objectif. « Paramétrage » : vos mots et vos colonnes.</div></div>
+  <div class="ins"><div class="dot bg-ac">${icon('save',16)}</div><div><b>Reprenez plus tard</b>« Sessions » : sauvegarde automatique, sessions nommées, fichier de session.</div></div></div>`}
 
 function clearDemo(silent){
  S.audits=S.audits.filter(a=>!a.demo);Object.keys(S.ann).forEach(k=>{if(k.startsWith('demo_'))delete S.ann[k]});
@@ -523,7 +634,7 @@ function clearDemo(silent){
  if(!silent)toast('Démo effacée : déposez votre fichier Excel')}
 function clearAll(){
  if(!confirm('Effacer tous les audits chargés ? (vos fichiers Excel ne sont pas modifiés)'))return;
- S.audits=[];S.files=[];S.ann={};S.sel=new Set();S.tpl=null;S.sec=null;S.open=null;S.detect={};render();toast('Tout est effacé')}
+ S.audits=[];S.files=[];S.ann={};S.sel=new Set();S.tpl=null;S.sec=null;S.open=null;S.detect={};S.resume=null;KV.del('auto');render();toast('Tout est effacé')}
 function demoBanner(){
  if(!S.audits.some(a=>a.demo))return'';
  return`<div class="ins" style="margin:0 0 16px;border-color:var(--obs);align-items:center"><div class="dot bg-obs">${icon('spark',16)}</div><div style="flex:1"><b>Vous regardez une démo (données fictives)</b>Déposez votre fichier Excel : la démo disparaît automatiquement.</div><button class="btn sm pri" data-act="pick">${icon('upload',14)} Charger mon fichier</button><button class="btn sm" data-act="cleardemo">Effacer la démo</button></div>`}
@@ -650,6 +761,39 @@ function critRows(list,n,sheet){
   <div class="sq">${e.hist.map((h,j)=>`<i class="${h==='-'?'':h}"></i>`).join('')}</div>
   <span class="pill ${e.n>1?'nc':'obs'}">${e.n>1?'×'+e.n:'1×'}</span></div>`).join('')}
 
+/* ===== Guide d'utilisation ===== */
+views.guide=function(){
+ const step=(n,t,body)=>`<div class="card" style="display:flex;gap:16px;align-items:flex-start"><div class="logo" style="width:36px;height:36px;border-radius:50%;font-size:16px;flex:none">${n}</div><div style="min-width:0"><h3 style="font-size:16px;margin:0 0 6px">${t}</h3><div style="line-height:1.6">${body}</div></div></div>`;
+ const faq=(q,a)=>`<div class="chk"><div><b style="font-weight:700">${q}</b><em style="white-space:normal;font-size:13px;margin-top:3px">${a}</em></div></div>`;
+ return`<div style="max-width:900px;display:grid;gap:14px;margin-top:6px">
+ <div class="card"><h3 style="font-size:18px;margin:0 0 6px">Comment ça marche, en 30 secondes</h3>
+  <div style="line-height:1.6">Vous avez un fichier Excel (ou CSV) où <b>chaque ligne est un audit</b> et <b>chaque colonne est un point contrôlé</b>, avec une réponse du type Conforme / Non conforme. Vous le glissez dans l'application : elle reconnaît les colonnes, calcule les taux de conformité, repère les points qui reviennent, et prépare un plan d'actions et une synthèse imprimable.
+  <div style="margin-top:10px"><button class="btn pri" data-act="nav" data-v="dash">${icon('upload',15)} Commencer avec mon fichier</button> <button class="btn" data-act="modele">${icon('download',15)} Télécharger un modèle Excel</button> <button class="btn" data-act="demo">${icon('spark',15)} Voir une démo</button></div></div></div>
+
+ ${step(1,'Préparer votre fichier','<ul style="margin:0;padding-left:18px"><li><b>Export SafetyCulture / iAuditor</b> (Excel ou CSV) : utilisez-le tel quel, sans rien modifier.</li><li><b>Votre propre Excel</b> : une ligne par audit ; une colonne par point contrôlé ; dans chaque case, une réponse (Conforme, Non conforme, À améliorer, N/A, OK, KO, Oui, Non, Partiel…).</li><li><b>Pas encore d\'outil ?</b> Le « Modèle Excel vierge » (menu de gauche) est prêt à remplir, avec son mode d\'emploi.</li><li>Colonnes facultatives mais utiles : <b>Date</b> (pour les courbes), <b>Auditeur</b>, <b>Nom de l\'audit</b>. Pour un commentaire sur un point, ajoutez la colonne « …_notes » ou « Commentaire » juste après.</li><li>Pour regrouper les points par section, écrivez les en-têtes sous la forme <b>Section_Point</b> (par exemple « Cuisine_Sol propre »).</li></ul>')}
+
+ ${step(2,'Charger le fichier','Glissez-le n\'importe où dans la page, ou cliquez sur « Ajouter des fichiers ». Vous pouvez en charger plusieurs. Si des réponses ne sont pas reconnues (par exemple « Acquis / En cours »), l\'application vous demande une seule fois ce qu\'elles signifient, puis s\'en souvient. La démo disparaît dès que vous chargez votre fichier.')}
+
+ ${step(3,'Mêmes colonnes = comparables','<b>Pour compiler plusieurs audits, les colonnes doivent être les mêmes.</b> On ne peut comparer que ce qui est comparable.<ul style="margin:8px 0 0;padding-left:18px"><li><b>Mêmes colonnes</b> (même modèle SafetyCulture, ou même Excel mois après mois) : les audits sont compilés. Vous obtenez tendances, récurrences et comparaison.</li><li><b>Colonnes différentes</b> (autre checklist) : c\'est un autre « type d\'audit ». Il est gardé à part ; un sélecteur « Type d\'audit » en haut du tableau de bord permet de passer de l\'un à l\'autre.</li><li><b>Colonnes presque identiques</b> (une colonne renommée) : à partir de 80 % de colonnes communes, les audits sont compilés. En dessous, l\'application vous montre les différences et vous laisse choisir « Comparer quand même » ou « Garder séparés ».</li></ul>')}
+
+ ${step(4,'Lire les écrans','<ul style="margin:0;padding-left:18px"><li><b>Tableau de bord</b> : taux de conformité, évolution, conformité par section, points critiques. Cliquez une section ou un audit pour filtrer.</li><li><b>Audits</b> : la liste de vos audits ; cliquez pour le détail point par point. Une corbeille retire un audit.</li><li><b>Non-conformités</b> : le plan d\'actions. Cliquez le statut pour passer Ouvert → En cours → Clos ; ouvrez une ligne pour ajouter un responsable, une action, des photos. L\'étoile épingle le point au one-pager.</li><li><b>One-pager</b> : une page de synthèse à votre image (logo, couleurs), exportable en PDF ou JPEG, ou imprimable. Cliquez le « message clé » pour le réécrire.</li></ul>')}
+
+ ${step(5,'Paramétrer','Menu <b>Paramétrage</b> : indiquez les mots de vos réponses (par exemple « Validé » = Conforme), choisissez la colonne date / auditeur / nom d\'audit si elle n\'est pas trouvée, ou le séparateur de sections. Le fichier est relu aussitôt. Menu <b>Identité visuelle</b> : nom, logo, couleur et objectif de conformité (la ligne verte des graphiques).')}
+
+ ${step(6,'Sauvegarder son travail','Menu <b>Sessions</b> : enregistrez sous un nom dans le navigateur, ou téléchargez un fichier de session (.json) à ranger ou partager. La sauvegarde automatique reprend votre dernière session à la prochaine ouverture ; décochez-la sur un ordinateur partagé. Vos fichiers Excel ne sont jamais modifiés.')}
+
+ ${step(7,'Exporter et partager','<ul style="margin:0;padding-left:18px"><li><b>One-pager</b> : PDF, JPEG ou impression.</li><li><b>Plan d\'actions</b> : export CSV (ouvrable dans Excel).</li><li><b>Télécharger l\'application</b> : un seul fichier HTML, à vos couleurs, qui fonctionne sans internet. À donner à un collègue ou à Copilot pour l\'adapter.</li></ul>')}
+
+ <div class="card"><h3 style="font-size:16px;margin:0 0 8px">Questions fréquentes</h3>
+  ${faq('Où vont mes données ?','Nulle part : tout se passe dans votre navigateur. Aucun envoi sur internet. Les sauvegardes restent sur votre ordinateur.')}
+  ${faq('Comment effacer la démo ?','Chargez votre fichier (elle disparaît toute seule) ou cliquez « Effacer la démo » dans le bandeau orange.')}
+  ${faq('Mon fichier contient deux types d\'audit.','Chacun est reconnu à part grâce à ses colonnes (et au nom du modèle pour SafetyCulture). Choisissez le « Type d\'audit » en haut du tableau de bord.')}
+  ${faq('Je charge le fichier du mois suivant.','Si les colonnes sont les mêmes, les nouveaux audits s\'ajoutent aux anciens. Les audits déjà chargés sont ignorés (pas de doublons). Gardez le même nom de fichier : pour un fichier sans identifiant d\'audit, nom du fichier + numéro de ligne servent d\'identifiant.')}
+  ${faq('J\'ai corrigé une ligne dans Excel.','Retirez l\'audit concerné (corbeille dans « Audits »), puis rechargez le fichier.')}
+  ${faq('Les courbes sont plates ou les dates absentes.','Il faut une colonne date (JJ/MM/AAAA). Sinon, choisissez-la dans Paramétrage.')}
+  ${faq('Une réponse est mal classée.','Paramétrage → « Vos réponses » : ajoutez le mot dans la bonne catégorie, ou modifiez le classement déjà enregistré.')}
+  ${faq('Comment le taux est-il calculé ?','Conformes ÷ (conformes + non conformes + à améliorer). Les « N/A » et « non audité » ne comptent pas.')}</div></div>`}
+
 views.dash=function(){
  const c=ctx();if(!c.all.length)return emptyState();
  const P=curPal(),tpls=[...new Set(S.audits.map(a=>a.tpl))];
@@ -669,7 +813,7 @@ views.dash=function(){
  const ics={ok:'bg-ok',nc:'bg-nc',obs:'bg-obs'};
  return`
  <div class="card filters">
-  <div class="frow">${tpls.length>1?`<label>Modèle</label><select data-in="tpl">${tpls.map(t=>`<option value="${esc(t)}" ${t===S.tpl?'selected':''}>${esc(S.audits.find(a=>a.tpl===t).tplName)}</option>`).join('')}</select>`:`<label>Modèle</label><b>${esc(c.all[0].tplName)}</b>`}
+  <div class="frow">${tpls.length>1?`<label>Type d'audit</label><select data-in="tpl">${tpls.map(t=>`<option value="${esc(t)}" ${t===S.tpl?'selected':''}>${esc(S.audits.find(a=>a.tpl===t).tplName)}</option>`).join('')}</select><span style="color:var(--mute);font-size:12px;max-width:440px">Chaque type d'audit a ses propres colonnes : ils ne sont pas comparés entre eux.</span>`:`<label>Type d'audit</label><b>${esc(c.all[0].tplName)}</b>`}
    <span style="flex:1"></span><button class="btn sm ghost" data-act="selall">Tout</button><button class="btn sm ghost" data-act="sellast">Dernier seul</button></div>
   <div class="frow"><label>Audits</label><div class="chips">${c.all.map(a=>`<button class="chip ${S.sel.has(a.id)?'on':''}" data-act="togaudit" data-v="${esc(a.id)}" data-tip="${esc(a.name+'\n'+dtx(a))}"><i></i>${esc(a.label)} · ${fp(a.rate)}</button>`).join('')}</div></div>
   ${S.sec?`<div class="frow"><label>Filtre</label><button class="chip on" data-act="sec" data-v="${esc(S.sec)}">Section : ${esc(S.sec)} ${icon('x',13)}</button></div>`:''}
@@ -701,7 +845,7 @@ views.audits=function(){
  const c=ctx();if(!c.all.length)return emptyState();const P=curPal();
  return`<div class="frow" style="justify-content:flex-end;margin-bottom:12px"><button class="btn sm" data-act="clearall">${icon('trash',14)} Tout effacer</button></div><div class="acards">${[...c.all].reverse().map(a=>`<div class="card acard" data-act="auditopen" data-v="${esc(a.id)}"><div>${gaugeSvg(a.rate,78,P,9)}</div>
   <div style="min-width:0"><h4>${esc(a.name)}</h4><div class="m">${dtx(a)}${a.dur?' · '+Math.floor(a.dur/60)+'h'+pad(a.dur%60):''}</div>
-  <div class="m">${esc(a.src)}</div><div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap"><span class="pill ok">${a.c.C} conformes</span><span class="pill nc">${a.c.NC} NC</span>${a.c.OBS?`<span class="pill obs">${a.c.OBS} obs.</span>`:''}</div></div>
+  <div class="m">${esc(a.src)} · ${esc(a.tplName)}</div><div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap"><span class="pill ok">${a.c.C} conformes</span><span class="pill nc">${a.c.NC} NC</span>${a.c.OBS?`<span class="pill obs">${a.c.OBS} obs.</span>`:''}</div></div>
   <button class="x" data-act="auditdel" data-v="${esc(a.id)}" data-tip="Retirer cet audit">${icon('trash',16)}</button></div>`).join('')}</div>`}
 
 function nclist(){
@@ -833,8 +977,8 @@ function pickPhotos(fid){const i=document.createElement('input');i.type='file';i
 function pickFiles(){const i=document.createElement('input');i.type='file';i.accept='.xlsx,.xlsm,.xls,.csv';i.multiple=true;i.onchange=()=>handleFiles(i.files);i.click()}
 
 /* ===== Session / marque / démo ===== */
-function saveSession(){dl(new Blob([JSON.stringify({v:1,audits:S.audits,ann:S.ann,sel:[...S.sel],tpl:S.tpl,op:S.op})],{type:'application/json'}),`session-audits-${new Date().toISOString().slice(0,10)}.json`)}
-function loadSession(file){file.text().then(t=>{try{const d=JSON.parse(t);S.audits=d.audits.map(a=>{analyse(a);a._seen=1;return a});S.ann=d.ann||{};S.sel=new Set(d.sel||S.audits.map(a=>a.id));S.tpl=d.tpl||S.audits[0]?.tpl;if(d.op)S.op=Object.assign(S.op,d.op);render();toast('Session chargée')}catch(e){toast('Fichier de session invalide')}})}
+function saveSession(){const sg=String(S.brand.name||'audits').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||'audits';dl(new Blob([JSON.stringify(sessData(''))],{type:'application/json'}),`session-${sg}-${new Date().toISOString().slice(0,10)}.json`)}
+function loadSession(file){file.text().then(t=>{try{applySess(JSON.parse(t));closeModal();toast('Session chargée')}catch(e){toast('Fichier de session invalide')}})}
 function openModal(h){closeModal();const m=document.createElement('div');m.className='modalbg';m.id='modal';m.innerHTML=`<div class="modal">${h}</div>`;m.addEventListener('mousedown',e=>{if(e.target===m)closeModal()});document.body.appendChild(m)}
 function closeModal(){$('#modal')?.remove()}
 function brandModal(){openModal(`<h2>Identité visuelle</h2>
@@ -880,16 +1024,16 @@ function demo(){
 /* ===== Rendu & événements ===== */
 const dtx=a=>a.nodate?'date non renseignée':fmtDT(a.date);
 function emptyNav(){return!S.audits.length}
-const TITLES={dash:'Tableau de bord',audits:'Audits chargés',nc:'Non-conformités & plan d\'actions',op:'One-pager'};
+const TITLES={dash:'Tableau de bord',audits:'Audits chargés',nc:'Non-conformités & plan d\'actions',op:'One-pager',guide:'Guide d\'utilisation'};
 function render(){
  applyBrand();const y=scrollY;const c=S.audits.length?ctx():null;
  const nNC=c?c.finds.filter(f=>A(f.fid).status!=='done').length:0;
  const b=S.brand;
  $('#app').innerHTML=`<div class="shell"><aside class="side"><div class="brandbox${b.logo&&b.logo.startsWith('data:image/svg')?' w':''}"><div class="logo">${b.logo?`<img src="${b.logo}">`:esc((b.name||'?')[0].toUpperCase())}</div><div><b>${esc(b.name)}</b><small>Audit Insight</small></div></div>
- <nav class="nav">${[['dash','dash','Tableau de bord'],['audits','file','Audits'],['nc','alert','Non-conformités'],['op','page','One-pager']].map(n=>`<button class="${S.view===n[0]?'on':''}" data-act="nav" data-v="${n[0]}">${icon(n[1])}${n[2]}${n[0]==='nc'&&nNC?`<span class="badge">${nNC}</span>`:''}</button>`).join('')}</nav>
- <div class="sidefoot"><button data-act="pick">${icon('upload')}Ajouter des fichiers</button><button data-act="savesess">${icon('save')}Enregistrer la session</button><button data-act="loadsess">${icon('file')}Ouvrir une session</button><button data-act="brand">${icon('gear')}Identité visuelle</button><button data-act="modele">${icon('file')}Modèle Excel vierge</button><button data-act="param">${icon('gear')}Paramétrage</button><button data-act="dlapp">${icon('download')}Télécharger l'application</button><button data-act="theme">${icon(S.theme==='dark'?'sun':'moon')}Thème ${S.theme==='dark'?'clair':'sombre'}</button></div></aside>
+ <nav class="nav">${[['dash','dash','Tableau de bord'],['audits','file','Audits'],['nc','alert','Non-conformités'],['op','page','One-pager'],['guide','help','Guide']].map(n=>`<button class="${S.view===n[0]?'on':''}" data-act="nav" data-v="${n[0]}">${icon(n[1])}${n[2]}${n[0]==='nc'&&nNC?`<span class="badge">${nNC}</span>`:''}</button>`).join('')}</nav>
+ <div class="sidefoot"><button data-act="pick">${icon('upload')}Ajouter des fichiers</button><button data-act="sess">${icon('save')}Sessions</button><button data-act="brand">${icon('gear')}Identité visuelle</button><button data-act="modele">${icon('file')}Modèle Excel vierge</button><button data-act="param">${icon('gear')}Paramétrage</button><button data-act="dlapp">${icon('download')}Télécharger l'application</button><button data-act="theme">${icon(S.theme==='dark'?'sun':'moon')}Thème ${S.theme==='dark'?'clair':'sombre'}</button></div></aside>
  <main class="main"><div class="top"><h1>${TITLES[S.view]}</h1><span class="sp"></span>${S.audits.length&&S.view!=='op'?`<button class="btn pri" data-act="pick">${icon('plus',15)} Ajouter des audits</button>`:''}${S.view==='op'?'':''}</div><div class="content" id="content">${demoBanner()}${views[S.view]()}</div></main></div>`;
- fitSheet();scrollTo(0,y)}
+ fitSheet();scrollTo(0,y);queueAutosave()}
 function rerenderKeep(){render()}
 function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('on');clearTimeout(toast.t);toast.t=setTimeout(()=>t.classList.remove('on'),3600)}
 document.addEventListener('click',e=>{
@@ -928,6 +1072,13 @@ document.addEventListener('click',e=>{
   case'clearall':clearAll();break;
   case'paramsave':saveParams();break;
   case'lblsave':$$('[data-lbl]').forEach(x=>{if(x.value)LABELS[norm(x.dataset.lbl)]=x.value});LS.set('gi_labels',LABELS);closeModal();reparse();break;
+  case'sess':sessModal();break;
+  case'sessave':sessSave();break;
+  case'sessopen':sessOpen(v);break;
+  case'sessdel':sessDel(v);break;
+  case'resume':resumeAuto();break;
+  case'dropauto':dropAuto();break;
+  case'mergevar':mergeVariant(+v);break;
   case'savesess':saveSession();break;
   case'loadsess':{const i=document.createElement('input');i.type='file';i.accept='.json';i.onchange=()=>i.files[0]&&loadSession(i.files[0]);i.click();break}
   case'logopick':{const i=document.createElement('input');i.type='file';i.accept='image/*';i.onchange=async()=>{const f=i.files[0];if(!f)return;const d=await resizeImg(f,500);
@@ -945,7 +1096,8 @@ document.addEventListener('input',e=>{const t=e.target,k=t.dataset&&t.dataset.in
 document.addEventListener('change',e=>{const t=e.target,k=t.dataset&&t.dataset.in;if(!k)return;
  if(k==='tpl'){S.tpl=t.value;S.sel=new Set(S.audits.filter(a=>a.tpl===S.tpl).map(a=>a.id));render()}
  else if(k==='ncst'){S.ncst=t.value;render()}else if(k==='secsel'){S.sec=t.value||null;render()}
- else if(k==='opn'){S.op.nb=+t.value;refreshSheet()}});
+ else if(k==='opn'){S.op.nb=+t.value;refreshSheet()}
+ else if(k==='autosave'){LS.set('gi_autosave',t.checked);toast(t.checked?'Sauvegarde automatique activée':'Sauvegarde automatique désactivée');if(t.checked)queueAutosave()}});
 /* tooltips */
 const tip=document.createElement('div');tip.id='tip';document.body.appendChild(tip);
 document.addEventListener('mouseover',e=>{const t=e.target.closest('[data-tip]');if(!t||!t.dataset.tip){tip.style.opacity=0;return}tip.innerHTML=esc(t.dataset.tip).replace(/\n/g,'<br>');tip.style.opacity=1});
@@ -962,4 +1114,5 @@ document.addEventListener('drop',e=>{e.preventDefault();dcount=0;veil.classList.
 addEventListener('resize',fitSheet);
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal()});
 render();
+checkResume();
 </script></body></html>

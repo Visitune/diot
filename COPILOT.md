@@ -23,6 +23,9 @@ Lecture de n'importe quel Excel/CSV « une ligne par audit, une colonne par poin
 | Paramétrage (réponses, colonnes) | `paramModal`, `saveParams`, `LABELS`, `CONFIG.cols` |
 | Modèle Excel vierge | `modeleXlsx` |
 | Démo / effacement | `demo`, `clearDemo`, `clearAll`, `demoBanner` |
+| Types d'audit (colonnes comparables), validation | `tplRegistry`, `resolveBatches`, `variantModal`, `mergeVariant` |
+| Sessions (nommées, fichier, automatique) | `KV`, `sessData`, `applySess`, `sessModal`, `queueAutosave` |
+| Guide intégré | `views.guide` |
 | Calculs (taux, sections, récurrence) | `analyse`, `ctx` |
 | Tableau de bord | `views.dash` |
 | Liste des non-conformités / plan d'actions | `views.nc`, `nclist`, `detail` |
