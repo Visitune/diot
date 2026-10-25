@@ -55,7 +55,7 @@ function render(){
 function load(name){S.cur=name;S.filter=null;S.q='';S.sort=null;S.page=0;S.m=build(name);
  const sel=$('#sheetSel');const names=Object.keys(S.sheets);sel.style.display=names.length>1?'':'none';sel.innerHTML=names.map(n=>`<option ${n===name?'selected':''}>${esc(n)}</option>`).join('');render()}
 async function handleFiles(files){
- if(TITRE_AUTO&&files[0]){const t=files[0].name.replace(/\.[^.]+$/,'').replace(/[_-]+/g,' ');$('#ttl').textContent=t;document.title=t}
+ if(titreAuto()&&files[0]){const t=files[0].name.replace(/\.[^.]+$/,'').replace(/[_-]+/g,' ');$('#ttl').textContent=t;document.title=t}
  files=[...files].filter(f=>/\.(xlsx|xlsm|xls|csv)$/i.test(f.name));if(!files.length){alert('Aucun fichier Excel/CSV détecté');return}
  S.sheets={};for(const f of files){try{await readFile(f)}catch(e){console.error(e);alert('Lecture impossible : '+f.name)}}
  const names=Object.keys(S.sheets);if(!names.length){alert('Aucune feuille avec des données');return}

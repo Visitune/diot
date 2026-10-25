@@ -1,6 +1,6 @@
 # Briques de code
 
-`dashboard.html` = ces briques mises bout à bout (00 dans `<style>`, 01 à 08 dans `<script>`, dans l'ordre des numéros).
+`dashboard.html` = ces briques mises bout à bout (00 dans `<style>`, 01 à 09 dans `<script>`, dans l'ordre des numéros).
 Ne modifier qu'UNE brique à la fois.
 
 | Brique | Rôle | Quand la modifier |
@@ -12,5 +12,6 @@ Ne modifier qu'UNE brique à la fois.
 | 04-analyse-colonnes.js | Devine le type de chaque colonne et construit les résultats | Une colonne est mal classée |
 | 05-dessin-graphiques.js | Camembert, barres, courbe (SVG) | Ajouter un nouveau type de graphique |
 | 06-rendu-page.js | Assemble la page (indicateurs, cartes, tableaux) | Ajouter / retirer une carte |
-| 07-evenements.js | Clics, glisser-déposer, exports | Ajouter un bouton |
-| 08-demarrage.js | Initialisation | Jamais |
+| 07-reglages.js | Fenêtre « Réglages » (coller le MAPPING) | Presque jamais |
+| 08-evenements.js | Clics, glisser-déposer, exports | Ajouter un bouton |
+| 09-demarrage.js | Initialisation | Jamais |

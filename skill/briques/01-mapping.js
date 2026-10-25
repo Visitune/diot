@@ -18,3 +18,5 @@ const MAPPING={
  statusWords:{C:[],NC:[],OBS:[],NA:[]} // libellés propres au client, en minuscules sans accents
 };
 /* ===================== FIN DU BLOC MAPPING ===================== */
+const MAPPING_DEFAUT=JSON.parse(JSON.stringify(MAPPING));
+try{const o=JSON.parse(localStorage.getItem('mapping')||'null');if(o)Object.assign(MAPPING,o)}catch(e){}

@@ -10,6 +10,7 @@ document.addEventListener('click',e=>{
 });
 $('#file').onchange=e=>handleFiles(e.target.files);
 $('#sheetSel').onchange=e=>load(e.target.value);
+$('#btnSet').onclick=openSettings;
 $('#btnTheme').onclick=()=>setTheme(S.theme==='dark'?'light':'dark');
 $('#btnPrint').onclick=()=>window.print();
 $('#btnCsv').onclick=()=>{if(!S.m)return;const m=S.m,L=['Statut;Point;'+m.dims.join(';')+';Date;Commentaire'];

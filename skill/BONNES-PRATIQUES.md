@@ -1,4 +1,6 @@
-# Bonnes pratiques (à appliquer à chaque réponse)
+# Bonnes pratiques pour modifier l'application (consultant uniquement)
+
+L'application publiée est `index.html` (copie de `dashboard.html`). Après toute modification : recopier `dashboard.html` vers `index.html`.
 
 1. **Recopier, ne pas réinventer.** Le modèle `dashboard.html` est testé. Tu le recopies en entier et tu ne changes que `const MAPPING`.
 2. **Un seul fichier HTML**, JavaScript simple (pas de React, pas de module, pas d'import). Seule bibliothèque autorisée : SheetJS (déjà dans le modèle).

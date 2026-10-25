@@ -40,6 +40,7 @@ th{cursor:pointer;position:sticky;top:0;background:var(--card)}.scroll{max-heigh
  <button class="pri" id="btnUp">Charger un Excel / CSV</button>
  <button id="btnCsv">Exporter CSV</button>
  <button id="btnPrint">Imprimer</button>
+ <button id="btnSet">Réglages</button>
  <button id="btnTheme">Thème</button>
  <input type="file" id="file" accept=".xlsx,.xlsm,.xls,.csv" multiple hidden>
 </header>
@@ -66,6 +67,8 @@ const MAPPING={
  statusWords:{C:[],NC:[],OBS:[],NA:[]} // libellés propres au client, en minuscules sans accents
 };
 /* ===================== FIN DU BLOC MAPPING ===================== */
+const MAPPING_DEFAUT=JSON.parse(JSON.stringify(MAPPING));
+try{const o=JSON.parse(localStorage.getItem('mapping')||'null');if(o)Object.assign(MAPPING,o)}catch(e){}
 
 /* ---------- utilitaires ---------- */
 const $=s=>document.querySelector(s);
@@ -81,7 +84,7 @@ const KNOWN={
  NA:['n/a','na','n.a.','non applicable','sans objet','non audite','non evalue']};
 function statusOf(v){const n=norm(v);if(!n)return null;
  for(const k of ['C','NC','OBS','NA']){if(((MAPPING.statusWords||{})[k]||[]).map(norm).includes(n)||KNOWN[k].includes(n))return k}return null}
-const TITRE_AUTO=MAPPING.title==='Tableau de bord';
+const titreAuto=()=>MAPPING.title===MAPPING_DEFAUT.title;
 const S={sheets:{},cur:null,filter:null,q:'',sort:null,page:0,theme:'light',m:null};
 
 /* ---------- lecture du fichier ---------- */
@@ -231,11 +234,32 @@ function render(){
 function load(name){S.cur=name;S.filter=null;S.q='';S.sort=null;S.page=0;S.m=build(name);
  const sel=$('#sheetSel');const names=Object.keys(S.sheets);sel.style.display=names.length>1?'':'none';sel.innerHTML=names.map(n=>`<option ${n===name?'selected':''}>${esc(n)}</option>`).join('');render()}
 async function handleFiles(files){
- if(TITRE_AUTO&&files[0]){const t=files[0].name.replace(/\.[^.]+$/,'').replace(/[_-]+/g,' ');$('#ttl').textContent=t;document.title=t}
+ if(titreAuto()&&files[0]){const t=files[0].name.replace(/\.[^.]+$/,'').replace(/[_-]+/g,' ');$('#ttl').textContent=t;document.title=t}
  files=[...files].filter(f=>/\.(xlsx|xlsm|xls|csv)$/i.test(f.name));if(!files.length){alert('Aucun fichier Excel/CSV détecté');return}
  S.sheets={};for(const f of files){try{await readFile(f)}catch(e){console.error(e);alert('Lecture impossible : '+f.name)}}
  const names=Object.keys(S.sheets);if(!names.length){alert('Aucune feuille avec des données');return}
  load(MAPPING.sheet&&S.sheets[MAPPING.sheet]?MAPPING.sheet:names[0])}
+
+/* ---------- réglages (coller le MAPPING donné par Copilot) ---------- */
+function parseMapping(txt){
+ let t=txt.trim().replace(/^```[a-z]*\s*/i,'').replace(/```\s*$/,'').trim().replace(/^(const|let|var)\s+MAPPING\s*=\s*/,'').replace(/;\s*$/,'').trim();
+ if(t[0]!=='{')throw new Error('Le texte doit commencer par « const MAPPING={ » ou « { ».');
+ return new Function('return ('+t+')')()}
+function applyMapping(o){
+ Object.keys(MAPPING).forEach(k=>delete MAPPING[k]);Object.assign(MAPPING,JSON.parse(JSON.stringify(MAPPING_DEFAUT)),o||{});
+ document.documentElement.style.setProperty('--accent',MAPPING.accent);$('#ttl').textContent=MAPPING.title;document.title=MAPPING.title;
+ if(S.cur)load(MAPPING.sheet&&S.sheets[MAPPING.sheet]?MAPPING.sheet:S.cur);else render()}
+function openSettings(){
+ const d=document.createElement('div');d.id='modal';d.style.cssText='position:fixed;inset:0;background:#0008;z-index:20;display:flex;align-items:center;justify-content:center;padding:16px';
+ d.innerHTML=`<div class="card" style="max-width:640px;width:100%"><h2>Réglages</h2><p style="color:var(--mute);margin:0 0 8px">Collez ici le texte « const MAPPING={ ... } » donné par Copilot, puis cliquez sur Appliquer. Laissez vide si tout s'affiche déjà correctement.</p>
+ <textarea id="mapt" style="width:100%;min-height:200px;font-family:monospace;font-size:12px;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px" placeholder="const MAPPING={ ... };"></textarea>
+ <p id="maperr" style="color:var(--nc);margin:6px 0;min-height:1.2em"></p>
+ <button class="pri" id="mapok">Appliquer</button> <button id="maprs">Revenir aux réglages automatiques</button> <button id="mapx">Fermer</button></div>`;
+ document.body.appendChild(d);
+ $('#mapx').onclick=()=>d.remove();
+ $('#mapok').onclick=()=>{try{const o=parseMapping($('#mapt').value);if(!o||typeof o!=='object')throw new Error('Réglage invalide.');
+  try{localStorage.setItem('mapping',JSON.stringify(o))}catch(e){}applyMapping(o);d.remove()}catch(e){$('#maperr').textContent='Erreur : '+e.message+' — renvoyez ce message à Copilot et demandez le bloc corrigé.'}};
+ $('#maprs').onclick=()=>{try{localStorage.removeItem('mapping')}catch(e){}applyMapping(null);d.remove()}}
 
 /* ---------- évènements ---------- */
 function setTheme(t){S.theme=t;document.documentElement.dataset.theme=t;try{localStorage.setItem('theme',t)}catch(e){}}
@@ -249,6 +273,7 @@ document.addEventListener('click',e=>{
 });
 $('#file').onchange=e=>handleFiles(e.target.files);
 $('#sheetSel').onchange=e=>load(e.target.value);
+$('#btnSet').onclick=openSettings;
 $('#btnTheme').onclick=()=>setTheme(S.theme==='dark'?'light':'dark');
 $('#btnPrint').onclick=()=>window.print();
 $('#btnCsv').onclick=()=>{if(!S.m)return;const m=S.m,L=['Statut;Point;'+m.dims.join(';')+';Date;Commentaire'];

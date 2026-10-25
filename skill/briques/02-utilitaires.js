@@ -12,5 +12,5 @@ const KNOWN={
  NA:['n/a','na','n.a.','non applicable','sans objet','non audite','non evalue']};
 function statusOf(v){const n=norm(v);if(!n)return null;
  for(const k of ['C','NC','OBS','NA']){if(((MAPPING.statusWords||{})[k]||[]).map(norm).includes(n)||KNOWN[k].includes(n))return k}return null}
-const TITRE_AUTO=MAPPING.title==='Tableau de bord';
+const titreAuto=()=>MAPPING.title===MAPPING_DEFAUT.title;
 const S={sheets:{},cur:null,filter:null,q:'',sort:null,page:0,theme:'light',m:null};
